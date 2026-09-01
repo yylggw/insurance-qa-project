@@ -172,14 +172,15 @@ class InsuranceGraphImporter:
         print(f"  ✅ TreatItem 导入完成，共 {len(entities)} 条")
 
     def import_medicine(self):
-        """导入药品（跳过前3行元数据头）"""
+        """导入药品（跳过第2-3行元数据行，第1行为表头）"""
         csv_path = get_file_path("__001__clawler/medicine_full_data.csv")
         entities = []
         seen_codes = set()
-        with open(csv_path, "r", encoding="utf-8") as f:
-            for _ in range(3):
-                next(f)
-            reader = csv.DictReader(f)
+        with open(csv_path, "r", encoding="utf-8-sig") as f:
+            header = next(f)  # 第1行是表头
+            next(f)  # 跳过第2行（数据库更新说明）
+            next(f)  # 跳过第3行（次要表头）
+            reader = csv.DictReader(f, fieldnames=header.strip().split(","))
             for row in reader:
                 medicine_code = row.get("药品代码", "").strip()
                 medicine_name = row.get("注册名称", "").strip()
@@ -277,6 +278,47 @@ class InsuranceGraphImporter:
                                         relations_applies)
             print(f"  ✅ APPLIES_TO 关系导入完成，共 {len(relations_applies)} 条")
 
+    def import_extra_relations(self):
+        """导入补充关系（慢特病、可使用药品/诊疗项目、执行机构、纳入政策）"""
+        csv_path = get_file_path("__001__clawler/graph_extra_relations.csv")
+
+        relations_by_type = {}  # {(rel_type, subject_label, object_label): [relations]}
+        nodes_to_ensure = set()  # {(label, name)}
+
+        with open(csv_path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                rel_type = row["关系类型"].strip()
+                subject_label = row["主体类型"].strip()
+                subject_name = row["主体名称"].strip()
+                object_label = row["客体类型"].strip()
+                object_name = row["客体名称"].strip()
+
+                key = (rel_type, subject_label, object_label)
+                if key not in relations_by_type:
+                    relations_by_type[key] = []
+                relations_by_type[key].append({
+                    "subject": subject_name,
+                    "object": object_name
+                })
+                nodes_to_ensure.add((subject_label, subject_name))
+                nodes_to_ensure.add((object_label, object_name))
+
+        # 先确保所有引用的节点存在（不存在则自动创建）
+        ensure_queries = []
+        for label, name in nodes_to_ensure:
+            ensure_queries.append(
+                (f"MERGE (n:{label} {{name: $name}})", {"name": name})
+            )
+        self.neo4j_client.run_multiple_cypher(ensure_queries)
+        print(f"  ✅ 已确保 {len(nodes_to_ensure)} 个引用节点存在")
+
+        # 再创建关系
+        # 再创建关系
+        for (rel_type, subject_label, object_label), relations in relations_by_type.items():
+            self._batch_merge_relations(rel_type, subject_label, object_label, relations)
+            print(f"  ✅ {rel_type} ({subject_label}→{object_label}) 关系导入完成，共 {len(relations)} 条")
+
     # ---------- 总入口 ----------
 
     def import_all(self):
@@ -289,6 +331,7 @@ class InsuranceGraphImporter:
             ("诊疗项目 (TreatItem)", self.import_treat_item),
             ("药品 (Medicine)", self.import_medicine),
             ("报销规则 (ReimburseRule) + 关系", self.import_reimburse_rule),
+            ("补充关系 (慢特病/可使用/执行机构/纳入)", self.import_extra_relations),
         ]
 
         for step_name, step_func in steps:
