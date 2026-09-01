@@ -1,0 +1,43 @@
+# 密钥/环境变量
+.env
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE 配置
+.idea/
+
+# 模型权重（超过 GitHub 100MB 限制）
+bge-large-zh-v1.5/
+
+# 原始数据（虚构/未完成）
+__000__data/
+
+# 爬虫数据
+__001__clawler/*.csv
+__001__clawler/temp_all_medicine_csv/
+__001__clawler/temp_disease_csv/
+__001__clawler/temp_medicine_csv/
+__001__clawler/参保类型/
+__001__clawler/报销规则/
+__001__clawler/政策文件/
+__001__clawler/疾病/
+__001__clawler/经办机构/
+__001__clawler/药品/
+__001__clawler/诊疗项目/
+
+# 抽取结果数据
+__002__extract_information/*.json
+
+# Neo4j 向量索引
+__003__create_neo4j_database/*.index
+__003__create_neo4j_database/*.pkl
+__003__create_neo4j_database/insurance_metadata.json
+
+# 其他
+cookie/
+picture/
+_tmp_read.py
+gitignore*.gitignore
